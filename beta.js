@@ -6,10 +6,6 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.maxDistance = 50;
 
-  // ------------------------------------------------------------
-  // NORMAL AIM SETTINGS
-  // ------------------------------------------------------------
-
   this_.gainX = 120;
   this_.gainY = 0.32;
 
@@ -27,10 +23,6 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.canvas = null;
 
-  // ------------------------------------------------------------
-  // CANVAS
-  // ------------------------------------------------------------
-
   this_.getCanvas = function() {
 
     if(
@@ -45,10 +37,6 @@ var aimbot = new client.Hack(function(this_) {
 
     return this_.canvas;
   };
-
-  // ------------------------------------------------------------
-  // NORMAL HORIZONTAL 360° AIM
-  // ------------------------------------------------------------
 
   this_.getHorizontalError = function(worldPos) {
 
@@ -72,10 +60,6 @@ var aimbot = new client.Hack(function(this_) {
 
     }
   };
-
-  // ------------------------------------------------------------
-  // NORMAL VERTICAL SCREEN POSITION
-  // ------------------------------------------------------------
 
   this_.getVerticalScreen = function(worldPos) {
 
@@ -114,27 +98,23 @@ var aimbot = new client.Hack(function(this_) {
     }
   };
 
-  // ------------------------------------------------------------
-  // BETTER AIM: FIND A REAL UPPER-BODY POINT
-  // ------------------------------------------------------------
-
   this_.getBetterAimPoint = function(player) {
 
     try {
 
-      /*
-       * Use the rendered player's bounding box instead of
-       * player.position, because player.position may be near
-       * the feet/origin.
-       */
       var box =
         new THREE.Box3().setFromObject(player);
 
       if(box.isEmpty()) {
+
         return player.getWorldPosition(
           new THREE.Vector3()
         ).add(
-          new THREE.Vector3(0, 1.15, 0)
+          new THREE.Vector3(
+            0,
+            1.15,
+            0
+          )
         );
       }
 
@@ -152,23 +132,26 @@ var aimbot = new client.Hack(function(this_) {
         return player.getWorldPosition(
           new THREE.Vector3()
         ).add(
-          new THREE.Vector3(0, 1.15, 0)
+          new THREE.Vector3(
+            0,
+            1.15,
+            0
+          )
         );
       }
 
-      /*
-       * Aim around the upper chest/head region.
-       *
-       * 0.72 means 72% up the rendered body, never the feet.
-       */
       var y =
         min.y +
         height * 0.72;
 
       return new THREE.Vector3(
+
         (min.x + max.x) / 2,
+
         y,
+
         (min.z + max.z) / 2
+
       );
 
     } catch(e) {
@@ -176,32 +159,22 @@ var aimbot = new client.Hack(function(this_) {
       return player.getWorldPosition(
         new THREE.Vector3()
       ).add(
-        new THREE.Vector3(0, 1.15, 0)
+        new THREE.Vector3(
+          0,
+          1.15,
+          0
+        )
       );
 
     }
   };
 
-  // ------------------------------------------------------------
-  // BETTER AIM: ONE-SHOT CAMERA CORRECTION
-  // ------------------------------------------------------------
-
   this_.getBetterAimDelta = function(worldPos) {
 
     try {
 
-      if(
-        !window.camera ||
-        !window.THREE
-      ) {
-        return null;
-      }
+      if(!window.camera) return null;
 
-      /*
-       * Convert target to camera-local coordinates.
-       *
-       * Three.js cameras look down -Z.
-       */
       var local =
         worldPos.clone();
 
@@ -211,11 +184,6 @@ var aimbot = new client.Hack(function(this_) {
       var y = local.y;
       var z = local.z;
 
-      /*
-       * Do not attempt a mathematical "snap" if we're basically
-       * inside the target. This prevents absurd values at point
-       * blank range.
-       */
       var distance =
         Math.sqrt(
           x * x +
@@ -224,28 +192,18 @@ var aimbot = new client.Hack(function(this_) {
         );
 
       if(distance < 0.001) {
+
         return {
           x: 0,
           y: 0
         };
       }
 
-      // --------------------------------------------------------
-      // EXACT HORIZONTAL ANGLE
-      // --------------------------------------------------------
-
-      /*
-       * Full 360°.
-       */
       var yaw =
         Math.atan2(
           x,
           -z
         );
-
-      // --------------------------------------------------------
-      // EXACT VERTICAL ANGLE
-      // --------------------------------------------------------
 
       var horizontal =
         Math.sqrt(
@@ -262,10 +220,6 @@ var aimbot = new client.Hack(function(this_) {
           )
         );
 
-      // --------------------------------------------------------
-      // CAMERA FOV
-      // --------------------------------------------------------
-
       var width =
         innerWidth;
 
@@ -279,9 +233,6 @@ var aimbot = new client.Hack(function(this_) {
         return null;
       }
 
-      /*
-       * Three.js camera.fov is vertical FOV in degrees.
-       */
       var verticalFov =
         THREE.MathUtils.degToRad(
           Number(camera.fov) || 60
@@ -291,9 +242,6 @@ var aimbot = new client.Hack(function(this_) {
         camera.aspect ||
         width / height;
 
-      /*
-       * Horizontal FOV derived from vertical FOV.
-       */
       var horizontalFov =
         2 *
         Math.atan(
@@ -303,16 +251,6 @@ var aimbot = new client.Hack(function(this_) {
           aspect
         );
 
-      // --------------------------------------------------------
-      // ANGLE -> SCREEN DELTA
-      // --------------------------------------------------------
-
-      /*
-       * Convert the angular error to the screen movement needed
-       * to put that exact ray onto the center of the screen.
-       *
-       * This is ONE correction, not a gradual controller.
-       */
       var movementX =
         Math.tan(yaw) *
         (
@@ -325,10 +263,6 @@ var aimbot = new client.Hack(function(this_) {
           )
         );
 
-      /*
-       * Positive pitch means the target is above the camera.
-       * Mouse Y is inverted.
-       */
       var movementY =
         -Math.tan(pitch) *
         (
@@ -348,9 +282,6 @@ var aimbot = new client.Hack(function(this_) {
         return null;
       }
 
-      /*
-       * Keep a huge but finite safety bound.
-       */
       movementX =
         Math.max(
           -1000000,
@@ -400,15 +331,19 @@ var aimbot = new client.Hack(function(this_) {
     }
 
     var localPlayer =
-      scene.children[0].children[6].children[0];
+      scene.children[0]
+        .children[6]
+        .children[0];
 
     if(!localPlayer) return;
 
     var players =
-      scene.children[0].children[10].children;
+      scene.children[0]
+        .children[10]
+        .children;
 
     // ----------------------------------------------------------
-    // KEEP CURRENT LOCK
+    // Keep current target
     // ----------------------------------------------------------
 
     if(this_.target) {
@@ -449,7 +384,7 @@ var aimbot = new client.Hack(function(this_) {
     }
 
     // ----------------------------------------------------------
-    // ACQUIRE TARGET ONLY WHEN NOT LOCKED
+    // Acquire target only if needed
     // ----------------------------------------------------------
 
     if(!this_.target) {
@@ -491,9 +426,11 @@ var aimbot = new client.Hack(function(this_) {
             closestDistance
           ) {
 
-            closestDistance = distance;
-            closest = player;
+            closestDistance =
+              distance;
 
+            closest =
+              player;
           }
 
         } catch(e) {}
@@ -506,7 +443,9 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      this_.target = closest;
+      this_.target =
+        closest;
+
       this_.targetDistance =
         closestDistance;
 
@@ -515,16 +454,154 @@ var aimbot = new client.Hack(function(this_) {
     }
 
     // ==========================================================
+    // LOCKIN — MAX PRIORITY
+    // ==========================================================
+
+    if(this_.config["LockIn"]) {
+
+      var lockPoint =
+        this_.getBetterAimPoint(
+          this_.target
+        );
+
+      if(!lockPoint) {
+        return;
+      }
+
+      /*
+       * Slightly favor the upper-middle body rather than feet.
+       * At very close range, avoid forcing the camera vertically.
+       */
+      if(
+        this_.targetDistance <= 1.5
+      ) {
+
+        var closeBox =
+          new THREE.Box3().setFromObject(
+            this_.target
+          );
+
+        if(!closeBox.isEmpty()) {
+
+          lockPoint.y =
+            closeBox.min.y +
+            (
+              closeBox.max.y -
+              closeBox.min.y
+            ) *
+            0.60;
+        }
+      }
+
+      var lockDelta =
+        this_.getBetterAimDelta(
+          lockPoint
+        );
+
+      if(!lockDelta) {
+        return;
+      }
+
+      /*
+       * Kill tiny camera noise.
+       */
+      if(
+        Math.abs(lockDelta.x) < 0.5
+      ) {
+
+        lockDelta.x = 0;
+      }
+
+      if(
+        Math.abs(lockDelta.y) < 0.5
+      ) {
+
+        lockDelta.y = 0;
+      }
+
+      /*
+       * Extremely close target:
+       * don't force vertical camera movement.
+       */
+      if(
+        this_.targetDistance <= 1.5
+      ) {
+
+        lockDelta.y = 0;
+      }
+
+      if(
+        lockDelta.x === 0 &&
+        lockDelta.y === 0
+      ) {
+
+        this_.type =
+          "LOCKED " +
+          Math.round(
+            this_.targetDistance * 10
+          ) / 10 +
+          "m";
+
+        return;
+      }
+
+      var lockCanvas =
+        this_.getCanvas();
+
+      if(!lockCanvas) {
+        return;
+      }
+
+      var lockElement =
+        document.pointerLockElement ||
+        lockCanvas;
+
+      /*
+       * ONE event only.
+       *
+       * No accumulated movement.
+       * No smoothing.
+       * No ImproveTurn.
+       * No BetterAim controller.
+       */
+      lockElement.dispatchEvent(
+        new MouseEvent(
+          "mousemove",
+          {
+            bubbles: true,
+            cancelable: true,
+
+            movementX:
+              lockDelta.x,
+
+            movementY:
+              lockDelta.y,
+
+            clientX:
+              innerWidth / 2,
+
+            clientY:
+              innerHeight / 2
+          }
+        )
+      );
+
+      this_.type =
+        "LOCKED " +
+        Math.round(
+          this_.targetDistance * 10
+        ) / 10 +
+        "m";
+
+      return;
+    }
+
+    // ==========================================================
     // BETTER AIM
     // ==========================================================
 
     if(this_.config["BetterAim"]) {
 
-      /*
-       * Get an actual upper-body point from the rendered player.
-       * This avoids aiming at player.position, which can be
-       * located around the feet.
-       */
       var betterAimPoint =
         this_.getBetterAimPoint(
           this_.target
@@ -534,13 +611,6 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      /*
-       * At extremely close range, don't force a vertical snap
-       * from an unstable bounding-box projection.
-       *
-       * Keep the upper-body point, but use the player's body
-       * center height as the safer close-range reference.
-       */
       if(
         this_.targetDistance <= 1.5
       ) {
@@ -562,14 +632,6 @@ var aimbot = new client.Hack(function(this_) {
         }
       }
 
-      /*
-       * ONE complete correction.
-       *
-       * No smoothing.
-       * No lerp.
-       * No ImproveTurn multiplier.
-       * No accumulation.
-       */
       var betterDelta =
         this_.getBetterAimDelta(
           betterAimPoint
@@ -579,9 +641,6 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      /*
-       * Ignore microscopic noise.
-       */
       if(
         Math.abs(betterDelta.x) < 0.5
       ) {
@@ -609,23 +668,18 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      var canvas =
+      var betterCanvas =
         this_.getCanvas();
 
-      if(!canvas) {
+      if(!betterCanvas) {
         return;
       }
 
-      /*
-       * One event only.
-       *
-       * Do not also send another mouse event to document.
-       */
-      var element =
+      var betterElement =
         document.pointerLockElement ||
-        canvas;
+        betterCanvas;
 
-      element.dispatchEvent(
+      betterElement.dispatchEvent(
         new MouseEvent(
           "mousemove",
           {
@@ -654,12 +708,6 @@ var aimbot = new client.Hack(function(this_) {
         ) / 10 +
         "m";
 
-      /*
-       * IMPORTANT:
-       *
-       * BetterAim completely replaces the normal controller.
-       * Do not fall through into the smoothing logic.
-       */
       return;
     }
 
@@ -683,7 +731,9 @@ var aimbot = new client.Hack(function(this_) {
       return;
     }
 
-    if(this_.config["ImproveTurn"]) {
+    if(
+      this_.config["ImproveTurn"]
+    ) {
 
       this_.angleY =
         horizontalError;
@@ -765,7 +815,9 @@ var aimbot = new client.Hack(function(this_) {
       verticalError *
       this_.gainY;
 
-    if(this_.config["ImproveTurn"]) {
+    if(
+      this_.config["ImproveTurn"]
+    ) {
 
       var absAngle =
         Math.abs(this_.angleY);
@@ -787,6 +839,7 @@ var aimbot = new client.Hack(function(this_) {
         Math.abs(verticalError) >
         100
       ) {
+
         moveY *= 2.0;
       }
     }
@@ -813,6 +866,7 @@ var aimbot = new client.Hack(function(this_) {
       Math.abs(moveX) <
       0.05
     ) {
+
       moveX = 0;
     }
 
@@ -820,6 +874,7 @@ var aimbot = new client.Hack(function(this_) {
       Math.abs(moveY) <
       0.05
     ) {
+
       moveY = 0;
     }
 
@@ -918,6 +973,11 @@ var aimbot = new client.Hack(function(this_) {
   },
 
   "BetterAim": {
+    type: 0,
+    defaultValue: false
+  },
+
+  "LockIn": {
     type: 0,
     defaultValue: false
   }
