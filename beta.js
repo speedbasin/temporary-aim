@@ -23,6 +23,15 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.canvas = null;
 
+  this_.prediction = {
+    leadTime: 0.10,
+    velocitySmooth: 0.65,
+    maxLead: 6.0,
+    minSpeed: 0.03
+  };
+
+  this_.velocity = new THREE.Vector3();
+
   this_.getCanvas = function() {
 
     if(
@@ -140,15 +149,11 @@ var aimbot = new client.Hack(function(this_) {
         );
       }
 
-      var y =
-        min.y +
-        height * 0.72;
-
       return new THREE.Vector3(
 
         (min.x + max.x) / 2,
 
-        y,
+        min.y + height * 0.72,
 
         (min.z + max.z) / 2
 
@@ -312,6 +317,181 @@ var aimbot = new client.Hack(function(this_) {
     }
   };
 
+  this_.getPredictedAimPoint = function(player) {
+
+    try {
+
+      var point =
+        this_.getBetterAimPoint(
+          player
+        );
+
+      if(!point) {
+        return null;
+      }
+
+      var velocity =
+        player.velocity;
+
+      if(
+        !velocity ||
+        !Number.isFinite(velocity.x) ||
+        !Number.isFinite(velocity.y) ||
+        !Number.isFinite(velocity.z)
+      ) {
+
+        return point;
+      }
+
+      this_.velocity.x +=
+        (
+          velocity.x -
+          this_.velocity.x
+        ) *
+        this_.prediction.velocitySmooth;
+
+      this_.velocity.y +=
+        (
+          velocity.y -
+          this_.velocity.y
+        ) *
+        this_.prediction.velocitySmooth;
+
+      this_.velocity.z +=
+        (
+          velocity.z -
+          this_.velocity.z
+        ) *
+        this_.prediction.velocitySmooth;
+
+      var speed =
+        this_.velocity.length();
+
+      if(
+        speed <
+        this_.prediction.minSpeed
+      ) {
+
+        return point;
+      }
+
+      var leadTime =
+        this_.prediction.leadTime;
+
+      /*
+       * Dynamic lead:
+       * faster target -> slightly more prediction.
+       */
+      if(speed > 2) {
+        leadTime *= 1.15;
+      }
+
+      if(speed > 5) {
+        leadTime *= 1.35;
+      }
+
+      if(speed > 8) {
+        leadTime *= 1.60;
+      }
+
+      if(
+        this_.targetDistance > 20
+      ) {
+        leadTime *= 1.15;
+      }
+
+      if(
+        this_.targetDistance < 5
+      ) {
+        leadTime *= 0.75;
+      }
+
+      var leadX =
+        this_.velocity.x *
+        leadTime;
+
+      var leadY =
+        this_.velocity.y *
+        leadTime;
+
+      var leadZ =
+        this_.velocity.z *
+        leadTime;
+
+      var leadDistance =
+        Math.sqrt(
+          leadX * leadX +
+          leadY * leadY +
+          leadZ * leadZ
+        );
+
+      if(
+        leadDistance >
+        this_.prediction.maxLead
+      ) {
+
+        var scale =
+          this_.prediction.maxLead /
+          leadDistance;
+
+        leadX *= scale;
+        leadY *= scale;
+        leadZ *= scale;
+      }
+
+      point.x += leadX;
+      point.y += leadY;
+      point.z += leadZ;
+
+      /*
+       * Never let prediction move the aim point below
+       * the player's upper-body region.
+       */
+      var box =
+        new THREE.Box3().setFromObject(
+          player
+        );
+
+      if(!box.isEmpty()) {
+
+        var minimumAimY =
+          box.min.y +
+          (
+            box.max.y -
+            box.min.y
+          ) *
+          0.55;
+
+        if(
+          point.y <
+          minimumAimY
+        ) {
+          point.y =
+            minimumAimY;
+        }
+      }
+
+      return point;
+
+    } catch(e) {
+
+      return this_.getBetterAimPoint(
+        player
+      );
+
+    }
+  };
+
+  this_.resetPrediction = function() {
+
+    this_.velocity.set(
+      0,
+      0,
+      0
+    );
+
+  };
+
 }, function(this_) {
 
   try {
@@ -325,6 +505,7 @@ var aimbot = new client.Hack(function(this_) {
       this_.targetDistance = Infinity;
       this_.angleY = 0;
       this_.screenY = null;
+      this_.resetPrediction();
       this_.type = "";
 
       return;
@@ -343,7 +524,7 @@ var aimbot = new client.Hack(function(this_) {
         .children;
 
     // ----------------------------------------------------------
-    // Keep current target
+    // Keep target
     // ----------------------------------------------------------
 
     if(this_.target) {
@@ -357,6 +538,7 @@ var aimbot = new client.Hack(function(this_) {
         this_.targetDistance = Infinity;
         this_.angleY = 0;
         this_.screenY = null;
+        this_.resetPrediction();
 
       } else {
 
@@ -374,17 +556,19 @@ var aimbot = new client.Hack(function(this_) {
           this_.targetDistance = Infinity;
           this_.angleY = 0;
           this_.screenY = null;
+          this_.resetPrediction();
 
         } else {
 
           this_.targetDistance =
             lockedDistance;
+
         }
       }
     }
 
     // ----------------------------------------------------------
-    // Acquire target only if needed
+    // Acquire target
     // ----------------------------------------------------------
 
     if(!this_.target) {
@@ -451,13 +635,132 @@ var aimbot = new client.Hack(function(this_) {
 
       this_.angleY = 0;
       this_.screenY = null;
+      this_.resetPrediction();
     }
 
     // ==========================================================
-    // LOCKIN — MAX PRIORITY
+    // PREDICTION — ABSOLUTE MAX PRIORITY
     // ==========================================================
 
-    if(this_.config["LockIn"]) {
+    if(
+      this_.config["Prediction"]
+    ) {
+
+      var predictedPoint =
+        this_.getPredictedAimPoint(
+          this_.target
+        );
+
+      if(!predictedPoint) {
+        return;
+      }
+
+      var predictionDelta =
+        this_.getBetterAimDelta(
+          predictedPoint
+        );
+
+      if(!predictionDelta) {
+        return;
+      }
+
+      if(
+        Math.abs(
+          predictionDelta.x
+        ) < 0.5
+      ) {
+        predictionDelta.x = 0;
+      }
+
+      if(
+        Math.abs(
+          predictionDelta.y
+        ) < 0.5
+      ) {
+        predictionDelta.y = 0;
+      }
+
+      /*
+       * At extremely close range, keep vertical movement neutral
+       * so prediction cannot cause a camera snap toward the ground
+       * or sky.
+       */
+      if(
+        this_.targetDistance <= 1.5
+      ) {
+
+        predictionDelta.y = 0;
+
+      }
+
+      if(
+        predictionDelta.x === 0 &&
+        predictionDelta.y === 0
+      ) {
+
+        this_.type =
+          "PREDICT LOCK " +
+          Math.round(
+            this_.targetDistance * 10
+          ) / 10 +
+          "m";
+
+        return;
+      }
+
+      var predictionCanvas =
+        this_.getCanvas();
+
+      if(!predictionCanvas) {
+        return;
+      }
+
+      var predictionElement =
+        document.pointerLockElement ||
+        predictionCanvas;
+
+      predictionElement.dispatchEvent(
+        new MouseEvent(
+          "mousemove",
+          {
+            bubbles: true,
+            cancelable: true,
+
+            movementX:
+              predictionDelta.x,
+
+            movementY:
+              predictionDelta.y,
+
+            clientX:
+              innerWidth / 2,
+
+            clientY:
+              innerHeight / 2
+          }
+        )
+      );
+
+      this_.type =
+        "PREDICT LOCK " +
+        Math.round(
+          this_.targetDistance * 10
+        ) / 10 +
+        "m";
+
+      /*
+       * Prediction owns the entire controller.
+       */
+      return;
+    }
+
+    // ==========================================================
+    // LOCKIN
+    // ==========================================================
+
+    if(
+      this_.config["LockIn"]
+    ) {
 
       var lockPoint =
         this_.getBetterAimPoint(
@@ -468,10 +771,6 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      /*
-       * Slightly favor the upper-middle body rather than feet.
-       * At very close range, avoid forcing the camera vertically.
-       */
       if(
         this_.targetDistance <= 1.5
       ) {
@@ -502,31 +801,21 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      /*
-       * Kill tiny camera noise.
-       */
       if(
         Math.abs(lockDelta.x) < 0.5
       ) {
-
         lockDelta.x = 0;
       }
 
       if(
         Math.abs(lockDelta.y) < 0.5
       ) {
-
         lockDelta.y = 0;
       }
 
-      /*
-       * Extremely close target:
-       * don't force vertical camera movement.
-       */
       if(
         this_.targetDistance <= 1.5
       ) {
-
         lockDelta.y = 0;
       }
 
@@ -556,14 +845,6 @@ var aimbot = new client.Hack(function(this_) {
         document.pointerLockElement ||
         lockCanvas;
 
-      /*
-       * ONE event only.
-       *
-       * No accumulated movement.
-       * No smoothing.
-       * No ImproveTurn.
-       * No BetterAim controller.
-       */
       lockElement.dispatchEvent(
         new MouseEvent(
           "mousemove",
@@ -600,7 +881,9 @@ var aimbot = new client.Hack(function(this_) {
     // BETTER AIM
     // ==========================================================
 
-    if(this_.config["BetterAim"]) {
+    if(
+      this_.config["BetterAim"]
+    ) {
 
       var betterAimPoint =
         this_.getBetterAimPoint(
@@ -615,18 +898,18 @@ var aimbot = new client.Hack(function(this_) {
         this_.targetDistance <= 1.5
       ) {
 
-        var closeBox =
+        var betterCloseBox =
           new THREE.Box3().setFromObject(
             this_.target
           );
 
-        if(!closeBox.isEmpty()) {
+        if(!betterCloseBox.isEmpty()) {
 
           betterAimPoint.y =
-            closeBox.min.y +
+            betterCloseBox.min.y +
             (
-              closeBox.max.y -
-              closeBox.min.y
+              betterCloseBox.max.y -
+              betterCloseBox.min.y
             ) *
             0.60;
         }
@@ -866,7 +1149,6 @@ var aimbot = new client.Hack(function(this_) {
       Math.abs(moveX) <
       0.05
     ) {
-
       moveX = 0;
     }
 
@@ -874,7 +1156,6 @@ var aimbot = new client.Hack(function(this_) {
       Math.abs(moveY) <
       0.05
     ) {
-
       moveY = 0;
     }
 
@@ -962,10 +1243,12 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.canvas = null;
 
+  this_.resetPrediction();
+
 }, "aimbot",
 "Locks aim onto the nearest player",
 "n",
-10,
+1,
 {
   "ImproveTurn": {
     type: 0,
@@ -978,6 +1261,11 @@ var aimbot = new client.Hack(function(this_) {
   },
 
   "LockIn": {
+    type: 0,
+    defaultValue: false
+  },
+
+  "Prediction": {
     type: 0,
     defaultValue: false
   }
