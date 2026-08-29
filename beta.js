@@ -1,3 +1,4 @@
+```js
 // Aimbot
 var aimbot = new client.Hack(function(this_) {
 
@@ -24,14 +25,17 @@ var aimbot = new client.Hack(function(this_) {
   this_.canvas = null;
 
   this_.prediction = {
-    leadTime: 0.10,
-    velocitySmooth: 0.60,
-    maxHorizontalLead: 6.0,
-    maxVerticalLead: 0.35,
+    leadTime: 0.085,
+    maxHorizontalLead: 5.0,
+    maxVerticalLead: 0.18,
     minSpeed: 0.03
   };
 
-  this_.velocity = new THREE.Vector3();
+  this_.velocity =
+    new THREE.Vector3();
+
+  this_.lastPredicted =
+    new THREE.Vector3();
 
   this_.getCanvas = function() {
 
@@ -188,9 +192,9 @@ var aimbot = new client.Hack(function(this_) {
 
       var distance =
         Math.sqrt(
-          x * x +
-          y * y +
-          z * z
+          x*x +
+          y*y +
+          z*z
         );
 
       if(distance < 0.001) {
@@ -209,8 +213,8 @@ var aimbot = new client.Hack(function(this_) {
 
       var horizontal =
         Math.sqrt(
-          x * x +
-          z * z
+          x*x +
+          z*z
         );
 
       var pitch =
@@ -284,27 +288,24 @@ var aimbot = new client.Hack(function(this_) {
         return null;
       }
 
-      movementX =
-        Math.max(
+      return {
+
+        x: Math.max(
           -1000000,
           Math.min(
             1000000,
             movementX
           )
-        );
+        ),
 
-      movementY =
-        Math.max(
+        y: Math.max(
           -256000,
           Math.min(
             256000,
             movementY
           )
-        );
+        )
 
-      return {
-        x: movementX,
-        y: movementY
       };
 
     } catch(e) {
@@ -339,31 +340,10 @@ var aimbot = new client.Hack(function(this_) {
         return point;
       }
 
-      this_.velocity.x +=
-        (
-          velocity.x -
-          this_.velocity.x
-        ) *
-        this_.prediction.velocitySmooth;
-
-      this_.velocity.y +=
-        (
-          velocity.y -
-          this_.velocity.y
-        ) *
-        this_.prediction.velocitySmooth;
-
-      this_.velocity.z +=
-        (
-          velocity.z -
-          this_.velocity.z
-        ) *
-        this_.prediction.velocitySmooth;
-
       var horizontalSpeed =
         Math.hypot(
-          this_.velocity.x,
-          this_.velocity.z
+          velocity.x,
+          velocity.z
         );
 
       if(
@@ -374,55 +354,29 @@ var aimbot = new client.Hack(function(this_) {
         return point;
       }
 
-      /*
-       * Horizontal prediction remains aggressive.
-       */
       var leadTime =
         this_.prediction.leadTime;
 
-      var distanceFactor =
+      var distanceScale =
         Math.min(
-          1.30,
+          1.20,
           Math.max(
-            0.80,
+            0.85,
             this_.targetDistance / 12
           )
         );
 
       leadTime *=
-        distanceFactor;
+        distanceScale;
 
       var leadX =
-        this_.velocity.x *
+        velocity.x *
         leadTime;
 
       var leadZ =
-        this_.velocity.z *
+        velocity.z *
         leadTime;
 
-      /*
-       * Y prediction is deliberately tiny.
-       *
-       * This prevents jumping/falling targets from causing
-       * huge vertical camera corrections.
-       */
-      var leadY =
-        this_.velocity.y *
-        leadTime *
-        0.12;
-
-      leadY =
-        Math.max(
-          -this_.prediction.maxVerticalLead,
-          Math.min(
-            this_.prediction.maxVerticalLead,
-            leadY
-          )
-        );
-
-      /*
-       * Limit horizontal prediction.
-       */
       var horizontalLead =
         Math.hypot(
           leadX,
@@ -434,22 +388,40 @@ var aimbot = new client.Hack(function(this_) {
         this_.prediction.maxHorizontalLead
       ) {
 
-        var scale =
+        var horizontalScale =
           this_.prediction.maxHorizontalLead /
           horizontalLead;
 
-        leadX *= scale;
-        leadZ *= scale;
+        leadX *=
+          horizontalScale;
+
+        leadZ *=
+          horizontalScale;
       }
 
-      point.x += leadX;
-      point.z += leadZ;
-      point.y += leadY;
+      var leadY =
+        velocity.y *
+        leadTime *
+        0.06;
 
-      /*
-       * Never let prediction fall into the lower part of
-       * the player's body.
-       */
+      leadY =
+        Math.max(
+          -this_.prediction.maxVerticalLead,
+          Math.min(
+            this_.prediction.maxVerticalLead,
+            leadY
+          )
+        );
+
+      point.x +=
+        leadX;
+
+      point.z +=
+        leadZ;
+
+      point.y +=
+        leadY;
+
       var box =
         new THREE.Box3().setFromObject(
           player
@@ -457,21 +429,17 @@ var aimbot = new client.Hack(function(this_) {
 
       if(!box.isEmpty()) {
 
+        var height =
+          box.max.y -
+          box.min.y;
+
         var minimumY =
           box.min.y +
-          (
-            box.max.y -
-            box.min.y
-          ) *
-          0.60;
+          height * 0.58;
 
         var maximumY =
           box.min.y +
-          (
-            box.max.y -
-            box.min.y
-          ) *
-          0.90;
+          height * 0.70;
 
         point.y =
           Math.max(
@@ -482,6 +450,21 @@ var aimbot = new client.Hack(function(this_) {
             )
           );
       }
+
+      if(
+        this_.lastPredicted &&
+        this_.lastPredicted.lengthSq() > 0
+      ) {
+
+        point.lerp(
+          this_.lastPredicted,
+          0.08
+        );
+      }
+
+      this_.lastPredicted.copy(
+        point
+      );
 
       return point;
 
@@ -500,6 +483,12 @@ var aimbot = new client.Hack(function(this_) {
       0,
       0
     );
+
+    this_.lastPredicted.set(
+      0,
+      0,
+      0
+    );
   };
 
 }, function(this_) {
@@ -513,6 +502,7 @@ var aimbot = new client.Hack(function(this_) {
 
       this_.target = null;
       this_.targetDistance = Infinity;
+
       this_.angleY = 0;
       this_.screenY = null;
 
@@ -535,14 +525,12 @@ var aimbot = new client.Hack(function(this_) {
         .children[10]
         .children;
 
-    // ==========================================================
-    // KEEP CURRENT TARGET
-    // ==========================================================
-
     if(this_.target) {
 
       if(
-        !players.includes(this_.target) ||
+        !players.includes(
+          this_.target
+        ) ||
         !this_.target.visible
       ) {
 
@@ -556,9 +544,6 @@ var aimbot = new client.Hack(function(this_) {
 
       } else {
 
-        /*
-         * Target retention is based ONLY on horizontal distance.
-         */
         var dx =
           this_.target.position.x -
           localPlayer.position.x;
@@ -593,10 +578,6 @@ var aimbot = new client.Hack(function(this_) {
         }
       }
     }
-
-    // ==========================================================
-    // ACQUIRE TARGET HORIZONTALLY
-    // ==========================================================
 
     if(!this_.target) {
 
@@ -661,7 +642,9 @@ var aimbot = new client.Hack(function(this_) {
 
       if(!closest) {
 
-        this_.type = "";
+        this_.type =
+          "";
+
         return;
       }
 
@@ -677,9 +660,19 @@ var aimbot = new client.Hack(function(this_) {
       this_.resetPrediction();
     }
 
-    // ==========================================================
-    // PREDICTION — ABSOLUTE MAX PRIORITY
-    // ==========================================================
+    var dx =
+      this_.target.position.x -
+      localPlayer.position.x;
+
+    var dz =
+      this_.target.position.z -
+      localPlayer.position.z;
+
+    this_.targetDistance =
+      Math.hypot(
+        dx,
+        dz
+      );
 
     if(
       this_.config["Prediction"]
@@ -694,10 +687,6 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      /*
-       * Both yaw AND pitch are calculated from the same
-       * predicted point.
-       */
       var delta =
         this_.getBetterAimDelta(
           predictedPoint
@@ -708,22 +697,33 @@ var aimbot = new client.Hack(function(this_) {
       }
 
       /*
-       * Tiny deadzone only to eliminate microscopic jitter.
+       * Strong horizontal correction.
        */
       if(
         Math.abs(delta.x) <
-        0.35
+        0.20
       ) {
 
         delta.x = 0;
       }
 
+      /*
+       * Smaller vertical deadzone prevents tiny up/down
+       * corrections from constantly flipping direction.
+       */
       if(
         Math.abs(delta.y) <
-        0.75
+        1.25
       ) {
 
         delta.y = 0;
+      }
+
+      var canvas =
+        this_.getCanvas();
+
+      if(!canvas) {
+        return;
       }
 
       if(
@@ -741,17 +741,13 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      var canvas =
-        this_.getCanvas();
-
-      if(!canvas) {
-        return;
-      }
-
       var element =
         document.pointerLockElement ||
         canvas;
 
+      /*
+       * One direct correction.
+       */
       element.dispatchEvent(
         new MouseEvent(
           "mousemove",
@@ -783,10 +779,6 @@ var aimbot = new client.Hack(function(this_) {
 
       return;
     }
-
-    // ==========================================================
-    // LOCKIN
-    // ==========================================================
 
     if(
       this_.config["LockIn"]
@@ -824,27 +816,6 @@ var aimbot = new client.Hack(function(this_) {
         lockDelta.y = 0;
       }
 
-      if(
-        this_.targetDistance <= 1.5
-      ) {
-        lockDelta.y = 0;
-      }
-
-      if(
-        lockDelta.x === 0 &&
-        lockDelta.y === 0
-      ) {
-
-        this_.type =
-          "LOCKED " +
-          Math.round(
-            this_.targetDistance * 10
-          ) / 10 +
-          "m";
-
-        return;
-      }
-
       var lockCanvas =
         this_.getCanvas();
 
@@ -852,31 +823,37 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      var lockElement =
-        document.pointerLockElement ||
-        lockCanvas;
+      if(
+        lockDelta.x !== 0 ||
+        lockDelta.y !== 0
+      ) {
 
-      lockElement.dispatchEvent(
-        new MouseEvent(
-          "mousemove",
-          {
-            bubbles: true,
-            cancelable: true,
+        var lockElement =
+          document.pointerLockElement ||
+          lockCanvas;
 
-            movementX:
-              lockDelta.x,
+        lockElement.dispatchEvent(
+          new MouseEvent(
+            "mousemove",
+            {
+              bubbles: true,
+              cancelable: true,
 
-            movementY:
-              lockDelta.y,
+              movementX:
+                lockDelta.x,
 
-            clientX:
-              innerWidth / 2,
+              movementY:
+                lockDelta.y,
 
-            clientY:
-              innerHeight / 2
-          }
-        )
-      );
+              clientX:
+                innerWidth / 2,
+
+              clientY:
+                innerHeight / 2
+            }
+          )
+        );
+      }
 
       this_.type =
         "LOCKED " +
@@ -888,26 +865,22 @@ var aimbot = new client.Hack(function(this_) {
       return;
     }
 
-    // ==========================================================
-    // BETTER AIM
-    // ==========================================================
-
     if(
       this_.config["BetterAim"]
     ) {
 
-      var betterAimPoint =
+      var betterPoint =
         this_.getBetterAimPoint(
           this_.target
         );
 
-      if(!betterAimPoint) {
+      if(!betterPoint) {
         return;
       }
 
       var betterDelta =
         this_.getBetterAimDelta(
-          betterAimPoint
+          betterPoint
         );
 
       if(!betterDelta) {
@@ -928,21 +901,6 @@ var aimbot = new client.Hack(function(this_) {
         betterDelta.y = 0;
       }
 
-      if(
-        betterDelta.x === 0 &&
-        betterDelta.y === 0
-      ) {
-
-        this_.type =
-          "BETTER LOCK " +
-          Math.round(
-            this_.targetDistance * 10
-          ) / 10 +
-          "m";
-
-        return;
-      }
-
       var betterCanvas =
         this_.getCanvas();
 
@@ -950,31 +908,37 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      var betterElement =
-        document.pointerLockElement ||
-        betterCanvas;
+      if(
+        betterDelta.x !== 0 ||
+        betterDelta.y !== 0
+      ) {
 
-      betterElement.dispatchEvent(
-        new MouseEvent(
-          "mousemove",
-          {
-            bubbles: true,
-            cancelable: true,
+        var betterElement =
+          document.pointerLockElement ||
+          betterCanvas;
 
-            movementX:
-              betterDelta.x,
+        betterElement.dispatchEvent(
+          new MouseEvent(
+            "mousemove",
+            {
+              bubbles: true,
+              cancelable: true,
 
-            movementY:
-              betterDelta.y,
+              movementX:
+                betterDelta.x,
 
-            clientX:
-              innerWidth / 2,
+              movementY:
+                betterDelta.y,
 
-            clientY:
-              innerHeight / 2
-          }
-        )
-      );
+              clientX:
+                innerWidth / 2,
+
+              clientY:
+                innerHeight / 2
+            }
+          )
+        );
+      }
 
       this_.type =
         "BETTER LOCK " +
@@ -985,10 +949,6 @@ var aimbot = new client.Hack(function(this_) {
 
       return;
     }
-
-    // ==========================================================
-    // NORMAL / IMPROVE TURN
-    // ==========================================================
 
     var aimPos =
       this_.target.getWorldPosition(
@@ -1036,11 +996,6 @@ var aimbot = new client.Hack(function(this_) {
 
     if(verticalScreen !== null) {
 
-      var verticalSmooth =
-        this_.config["ImproveTurn"]
-          ? 0.75
-          : this_.targetSmooth;
-
       if(this_.screenY === null) {
 
         this_.screenY =
@@ -1053,16 +1008,18 @@ var aimbot = new client.Hack(function(this_) {
             verticalScreen -
             this_.screenY
           ) *
-          verticalSmooth;
+          (
+            this_.config["ImproveTurn"]
+              ? 0.75
+              : this_.targetSmooth
+          );
       }
     }
 
-    var centerY =
-      innerHeight / 2;
-
     var verticalError =
       this_.screenY !== null
-        ? this_.screenY - centerY
+        ? this_.screenY -
+          innerHeight / 2
         : 0;
 
     if(
@@ -1095,7 +1052,9 @@ var aimbot = new client.Hack(function(this_) {
     ) {
 
       var absAngle =
-        Math.abs(this_.angleY);
+        Math.abs(
+          this_.angleY
+        );
 
       if(absAngle > 0.25) {
 
@@ -1155,19 +1114,6 @@ var aimbot = new client.Hack(function(this_) {
       moveX === 0 &&
       moveY === 0
     ) {
-
-      this_.type =
-        (
-          this_.config["ImproveTurn"]
-            ? "IMPROVED "
-            : ""
-        ) +
-        "LOCK " +
-        Math.round(
-          this_.targetDistance * 10
-        ) / 10 +
-        "m";
-
       return;
     }
 
@@ -1203,18 +1149,6 @@ var aimbot = new client.Hack(function(this_) {
         }
       )
     );
-
-    this_.type =
-      (
-        this_.config["ImproveTurn"]
-          ? "IMPROVED "
-          : ""
-      ) +
-      "LOCK " +
-      Math.round(
-        this_.targetDistance * 10
-      ) / 10 +
-      "m";
 
   } catch(e) {
 
@@ -1262,3 +1196,4 @@ var aimbot = new client.Hack(function(this_) {
     defaultValue: false
   }
 });
+```
