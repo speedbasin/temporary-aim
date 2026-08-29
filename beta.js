@@ -23,22 +23,15 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.canvas = null;
 
-  // ----------------------------------------------------------
-  // Prediction
-  // ----------------------------------------------------------
-
   this_.prediction = {
     leadTime: 0.10,
-    velocitySmooth: 0.65,
-    maxLead: 6.0,
+    velocitySmooth: 0.60,
+    maxHorizontalLead: 6.0,
+    maxVerticalLead: 0.35,
     minSpeed: 0.03
   };
 
   this_.velocity = new THREE.Vector3();
-
-  // ----------------------------------------------------------
-  // Canvas
-  // ----------------------------------------------------------
 
   this_.getCanvas = function() {
 
@@ -54,10 +47,6 @@ var aimbot = new client.Hack(function(this_) {
 
     return this_.canvas;
   };
-
-  // ----------------------------------------------------------
-  // Horizontal angle
-  // ----------------------------------------------------------
 
   this_.getHorizontalError = function(worldPos) {
 
@@ -78,13 +67,8 @@ var aimbot = new client.Hack(function(this_) {
     } catch(e) {
 
       return null;
-
     }
   };
-
-  // ----------------------------------------------------------
-  // Vertical screen position
-  // ----------------------------------------------------------
 
   this_.getVerticalScreen = function(worldPos) {
 
@@ -119,13 +103,8 @@ var aimbot = new client.Hack(function(this_) {
     } catch(e) {
 
       return null;
-
     }
   };
-
-  // ----------------------------------------------------------
-  // Upper-body aim point
-  // ----------------------------------------------------------
 
   this_.getBetterAimPoint = function(player) {
 
@@ -189,13 +168,8 @@ var aimbot = new client.Hack(function(this_) {
           0
         )
       );
-
     }
   };
-
-  // ----------------------------------------------------------
-  // Direct yaw + pitch -> mouse delta
-  // ----------------------------------------------------------
 
   this_.getBetterAimDelta = function(worldPos) {
 
@@ -336,13 +310,8 @@ var aimbot = new client.Hack(function(this_) {
     } catch(e) {
 
       return null;
-
     }
   };
-
-  // ----------------------------------------------------------
-  // Prediction
-  // ----------------------------------------------------------
 
   this_.getPredictedAimPoint = function(player) {
 
@@ -370,9 +339,6 @@ var aimbot = new client.Hack(function(this_) {
         return point;
       }
 
-      /*
-       * Smooth the game's real velocity.
-       */
       this_.velocity.x +=
         (
           velocity.x -
@@ -394,10 +360,6 @@ var aimbot = new client.Hack(function(this_) {
         ) *
         this_.prediction.velocitySmooth;
 
-      /*
-       * Use horizontal speed for prediction decisions.
-       * Vertical velocity does not control target selection.
-       */
       var horizontalSpeed =
         Math.hypot(
           this_.velocity.x,
@@ -413,18 +375,16 @@ var aimbot = new client.Hack(function(this_) {
       }
 
       /*
-       * Adaptive lead based on horizontal movement.
-       *
-       * No stack of arbitrary speed multipliers.
+       * Horizontal prediction remains aggressive.
        */
       var leadTime =
         this_.prediction.leadTime;
 
       var distanceFactor =
         Math.min(
-          1.35,
+          1.30,
           Math.max(
-            0.70,
+            0.80,
             this_.targetDistance / 12
           )
         );
@@ -441,16 +401,28 @@ var aimbot = new client.Hack(function(this_) {
         leadTime;
 
       /*
-       * Vertical velocity is intentionally handled separately.
-       * This keeps airborne targets trackable without letting a
-       * sudden Y velocity completely redirect target selection.
+       * Y prediction is deliberately tiny.
+       *
+       * This prevents jumping/falling targets from causing
+       * huge vertical camera corrections.
        */
       var leadY =
         this_.velocity.y *
-        (
-          leadTime * 0.75
+        leadTime *
+        0.12;
+
+      leadY =
+        Math.max(
+          -this_.prediction.maxVerticalLead,
+          Math.min(
+            this_.prediction.maxVerticalLead,
+            leadY
+          )
         );
 
+      /*
+       * Limit horizontal prediction.
+       */
       var horizontalLead =
         Math.hypot(
           leadX,
@@ -459,32 +431,24 @@ var aimbot = new client.Hack(function(this_) {
 
       if(
         horizontalLead >
-        this_.prediction.maxLead
+        this_.prediction.maxHorizontalLead
       ) {
 
-        var horizontalScale =
-          this_.prediction.maxLead /
+        var scale =
+          this_.prediction.maxHorizontalLead /
           horizontalLead;
 
-        leadX *=
-          horizontalScale;
-
-        leadZ *=
-          horizontalScale;
+        leadX *= scale;
+        leadZ *= scale;
       }
 
-      point.x +=
-        leadX;
-
-      point.y +=
-        leadY;
-
-      point.z +=
-        leadZ;
+      point.x += leadX;
+      point.z += leadZ;
+      point.y += leadY;
 
       /*
-       * Never let prediction fall below the upper half of the
-       * rendered target.
+       * Never let prediction fall into the lower part of
+       * the player's body.
        */
       var box =
         new THREE.Box3().setFromObject(
@@ -493,22 +457,30 @@ var aimbot = new client.Hack(function(this_) {
 
       if(!box.isEmpty()) {
 
-        var minAimY =
+        var minimumY =
           box.min.y +
           (
             box.max.y -
             box.min.y
           ) *
-          0.55;
+          0.60;
 
-        if(
-          point.y <
-          minAimY
-        ) {
+        var maximumY =
+          box.min.y +
+          (
+            box.max.y -
+            box.min.y
+          ) *
+          0.90;
 
-          point.y =
-            minAimY;
-        }
+        point.y =
+          Math.max(
+            minimumY,
+            Math.min(
+              maximumY,
+              point.y
+            )
+          );
       }
 
       return point;
@@ -518,7 +490,6 @@ var aimbot = new client.Hack(function(this_) {
       return this_.getBetterAimPoint(
         player
       );
-
     }
   };
 
@@ -529,7 +500,6 @@ var aimbot = new client.Hack(function(this_) {
       0,
       0
     );
-
   };
 
 }, function(this_) {
@@ -566,7 +536,7 @@ var aimbot = new client.Hack(function(this_) {
         .children;
 
     // ==========================================================
-    // KEEP TARGET
+    // KEEP CURRENT TARGET
     // ==========================================================
 
     if(this_.target) {
@@ -587,8 +557,7 @@ var aimbot = new client.Hack(function(this_) {
       } else {
 
         /*
-         * Distance used for maintaining the lock is ALSO
-         * horizontal only.
+         * Target retention is based ONLY on horizontal distance.
          */
         var dx =
           this_.target.position.x -
@@ -660,11 +629,6 @@ var aimbot = new client.Hack(function(this_) {
             return;
           }
 
-          /*
-           * IMPORTANT:
-           *
-           * Ignore Y completely when choosing who to target.
-           */
           var dx =
             player.position.x -
             localPlayer.position.x;
@@ -673,19 +637,19 @@ var aimbot = new client.Hack(function(this_) {
             player.position.z -
             localPlayer.position.z;
 
-          var horizontalDistance =
+          var distance =
             Math.hypot(
               dx,
               dz
             );
 
           if(
-            horizontalDistance <
+            distance <
             closestDistance
           ) {
 
             closestDistance =
-              horizontalDistance;
+              distance;
 
             closest =
               player;
@@ -698,7 +662,6 @@ var aimbot = new client.Hack(function(this_) {
       if(!closest) {
 
         this_.type = "";
-
         return;
       }
 
@@ -715,7 +678,7 @@ var aimbot = new client.Hack(function(this_) {
     }
 
     // ==========================================================
-    // PREDICTION — MAX PRIORITY
+    // PREDICTION — ABSOLUTE MAX PRIORITY
     // ==========================================================
 
     if(
@@ -732,10 +695,8 @@ var aimbot = new client.Hack(function(this_) {
       }
 
       /*
-       * getBetterAimDelta calculates BOTH:
-       *
-       * yaw = horizontal direction
-       * pitch = vertical direction
+       * Both yaw AND pitch are calculated from the same
+       * predicted point.
        */
       var delta =
         this_.getBetterAimDelta(
@@ -747,33 +708,22 @@ var aimbot = new client.Hack(function(this_) {
       }
 
       /*
-       * Tiny deadzone only.
-       * No smoothing and no correction accumulation.
+       * Tiny deadzone only to eliminate microscopic jitter.
        */
       if(
         Math.abs(delta.x) <
-        0.5
+        0.35
       ) {
+
         delta.x = 0;
       }
 
       if(
         Math.abs(delta.y) <
-        0.5
-      ) {
-        delta.y = 0;
-      }
-
-      /*
-       * Do not let very-close prediction make the camera
-       * violently move vertically.
-       */
-      if(
-        this_.targetDistance <= 1.5
+        0.75
       ) {
 
         delta.y = 0;
-
       }
 
       if(
@@ -802,9 +752,6 @@ var aimbot = new client.Hack(function(this_) {
         document.pointerLockElement ||
         canvas;
 
-      /*
-       * EXACTLY ONE camera event.
-       */
       element.dispatchEvent(
         new MouseEvent(
           "mousemove",
