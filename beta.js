@@ -1,4 +1,3 @@
-```js
 // Aimbot
 var aimbot = new client.Hack(function(this_) {
 
@@ -1196,4 +1195,3 @@ var aimbot = new client.Hack(function(this_) {
     defaultValue: false
   }
 });
-```
