@@ -151,7 +151,7 @@ var aimbot = new client.Hack(function(this_) {
         (box.min.x + box.max.x) / 2,
 
         box.min.y +
-        height * 0.72,
+        height * 0.60,
 
         (box.min.z + box.max.z) / 2
 
