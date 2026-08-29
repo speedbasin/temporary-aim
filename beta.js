@@ -1,3 +1,4 @@
+```js
 // Aimbot
 var aimbot = new client.Hack(function(this_) {
 
@@ -36,12 +37,8 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.selectedPlayerName = null;
 
-  this_.playerPanel = null;
-  this_.playerList = null;
-
-  // ----------------------------------------------------------
-  // Canvas
-  // ----------------------------------------------------------
+  this_.playerSelector = null;
+  this_.playerSelectorList = null;
 
   this_.getCanvas = function() {
 
@@ -58,37 +55,31 @@ var aimbot = new client.Hack(function(this_) {
     return this_.canvas;
   };
 
-  // ----------------------------------------------------------
-  // Player name resolver
-  // ----------------------------------------------------------
-
   this_.getPlayerName = function(player) {
 
     try {
 
-      var directKeys = [
+      var keys = [
         "name",
         "username",
         "displayName",
         "playerName",
-        "nick",
-        "nickname"
+        "nickname",
+        "nick"
       ];
 
       for(
         var i = 0;
-        i < directKeys.length;
+        i < keys.length;
         i++
       ) {
 
-        var key =
-          directKeys[i];
+        var key = keys[i];
 
         if(
           typeof player[key] === "string" &&
           player[key].trim()
         ) {
-
           return player[key].trim();
         }
       }
@@ -107,8 +98,7 @@ var aimbot = new client.Hack(function(this_) {
         c++
       ) {
 
-        var obj =
-          containers[c];
+        var obj = containers[c];
 
         if(
           !obj ||
@@ -119,18 +109,16 @@ var aimbot = new client.Hack(function(this_) {
 
         for(
           var j = 0;
-          j < directKeys.length;
+          j < keys.length;
           j++
         ) {
 
-          var k =
-            directKeys[j];
+          var k = keys[j];
 
           if(
             typeof obj[k] === "string" &&
             obj[k].trim()
           ) {
-
             return obj[k].trim();
           }
         }
@@ -143,10 +131,6 @@ var aimbot = new client.Hack(function(this_) {
       return null;
     }
   };
-
-  // ----------------------------------------------------------
-  // Player list
-  // ----------------------------------------------------------
 
   this_.getPlayers = function() {
 
@@ -165,38 +149,36 @@ var aimbot = new client.Hack(function(this_) {
           .children[6]
           .children[0];
 
-      var players =
-        scene.children[0]
-          .children[10]
-          .children;
+      return scene.children[0]
+        .children[10]
+        .children
+        .filter(function(player) {
 
-      return players.filter(function(player) {
+          try {
 
-        try {
+            if(
+              !player ||
+              player === localPlayer ||
+              !player.visible
+            ) {
+              return false;
+            }
 
-          if(!player || player === localPlayer) {
+            if(
+              !player.children ||
+              !player.children[1] ||
+              player.children[1].type !== "Sprite"
+            ) {
+              return false;
+            }
+
+            return true;
+
+          } catch(e) {
+
             return false;
           }
-
-          if(!player.visible) {
-            return false;
-          }
-
-          if(
-            !player.children ||
-            !player.children[1] ||
-            player.children[1].type !== "Sprite"
-          ) {
-            return false;
-          }
-
-          return true;
-
-        } catch(e) {
-
-          return false;
-        }
-      });
+        });
 
     } catch(e) {
 
@@ -204,138 +186,181 @@ var aimbot = new client.Hack(function(this_) {
     }
   };
 
-  // ----------------------------------------------------------
-  // Create player selector
-  // ----------------------------------------------------------
+  this_.createPlayerSelector = function() {
 
-  this_.createPlayerPanel = function() {
+    if(this_.playerSelector) {
 
-    if(this_.playerPanel) {
+      this_.updatePlayerSelector();
+      this_.playerSelector.style.display =
+        "block";
+
       return;
     }
 
-    var panel =
+    var overlay =
       document.createElement("div");
 
-    panel.style.cssText =
+    overlay.style.cssText =
       "position:fixed;" +
-      "top:50%;" +
-      "right:24px;" +
-      "transform:translateY(-50%);" +
-      "width:220px;" +
-      "max-height:60vh;" +
-      "overflow-y:auto;" +
-      "background:rgba(20,25,40,0.96);" +
-      "border:1px solid rgba(100,140,220,0.5);" +
-      "border-radius:8px;" +
-      "padding:8px;" +
-      "z-index:10001;" +
-      "font-family:inherit;" +
-      "color:#fff;" +
-      "box-shadow:0 8px 30px rgba(0,0,0,0.35);" +
-      "display:none;";
+      "inset:0;" +
+      "z-index:100000;" +
+      "background:rgba(0,0,0,0.45);";
 
-    var header =
+    var box =
       document.createElement("div");
 
-    header.textContent =
+    box.style.cssText =
+      "position:absolute;" +
+      "left:50%;" +
+      "top:50%;" +
+      "transform:translate(-50%,-50%);" +
+      "width:300px;" +
+      "max-height:65vh;" +
+      "overflow:auto;" +
+      "padding:10px;" +
+      "background:rgba(20,25,40,0.98);" +
+      "border:1px solid rgba(100,140,220,0.6);" +
+      "border-radius:8px;" +
+      "color:#fff;" +
+      "font-family:inherit;" +
+      "box-shadow:0 8px 30px rgba(0,0,0,0.4);";
+
+    var title =
+      document.createElement("div");
+
+    title.textContent =
       "Aimbot Targets";
 
-    header.style.cssText =
+    title.style.cssText =
+      "font-size:16px;" +
       "font-weight:bold;" +
-      "padding:6px 8px;" +
-      "margin-bottom:6px;" +
+      "padding:5px 6px 9px;" +
       "border-bottom:1px solid rgba(255,255,255,0.12);";
 
-    panel.appendChild(header);
+    box.appendChild(title);
 
-    var none =
+    var close =
       document.createElement("button");
 
-    none.textContent =
-      "Automatic / Nearest";
+    close.textContent =
+      "Close";
 
-    none.style.cssText =
-      "display:block;" +
-      "width:100%;" +
-      "padding:7px;" +
-      "margin-bottom:5px;" +
-      "border:0;" +
-      "border-radius:5px;" +
-      "cursor:pointer;" +
-      "background:rgba(100,140,220,0.25);" +
-      "color:#fff;";
+    close.style.cssText =
+      "position:absolute;" +
+      "right:10px;" +
+      "top:9px;" +
+      "cursor:pointer;";
 
-    none.onclick = function() {
-
-      this_.selectedPlayerName =
-        null;
-
-      this_.target = null;
-      this_.targetName = null;
-
-      this_.resetPrediction();
-
-      this_.updatePlayerPanel();
-
+    close.onclick = function() {
+      overlay.style.display = "none";
     };
 
-    panel.appendChild(none);
+    box.appendChild(close);
 
     var list =
       document.createElement("div");
 
-    panel.appendChild(list);
+    list.style.marginTop =
+      "8px";
 
-    this_.playerPanel = panel;
-    this_.playerList = list;
+    box.appendChild(list);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
 
-    document.body.appendChild(panel);
+    this_.playerSelector =
+      overlay;
 
-    this_.updatePlayerPanel();
+    this_.playerSelectorList =
+      list;
+
+    this_.updatePlayerSelector();
   };
 
-  // ----------------------------------------------------------
-  // Update player selector
-  // ----------------------------------------------------------
+  this_.updatePlayerSelector = function() {
 
-  this_.updatePlayerPanel = function() {
-
-    if(!this_.playerPanel) {
+    if(!this_.playerSelectorList) {
       return;
     }
 
     var players =
       this_.getPlayers();
 
-    this_.playerList.innerHTML = "";
+    this_.playerSelectorList.innerHTML =
+      "";
+
+    var automatic =
+      document.createElement("button");
+
+    automatic.textContent =
+      "Automatic / Nearest";
+
+    automatic.style.cssText =
+      "display:block;" +
+      "width:100%;" +
+      "padding:8px;" +
+      "margin:4px 0;" +
+      "cursor:pointer;" +
+      "border:0;" +
+      "border-radius:5px;" +
+      "background:rgba(100,140,220,0.25);" +
+      "color:#fff;";
+
+    automatic.onclick = function() {
+
+      this_.selectedPlayerName =
+        null;
+
+      this_.target =
+        null;
+
+      this_.targetName =
+        null;
+
+      this_.resetPrediction();
+
+      this_.playerSelector.style.display =
+        "none";
+    };
+
+    this_.playerSelectorList.appendChild(
+      automatic
+    );
+
+    if(!players.length) {
+
+      var empty =
+        document.createElement("div");
+
+      empty.textContent =
+        "No players detected.";
+
+      empty.style.cssText =
+        "padding:10px;" +
+        "opacity:0.7;" +
+        "text-align:center;";
+
+      this_.playerSelectorList.appendChild(
+        empty
+      );
+
+      return;
+    }
 
     var seen =
       new Set();
 
-    for(
-      var i = 0;
-      i < players.length;
-      i++
-    ) {
-
-      var player =
-        players[i];
+    players.forEach(function(player, index) {
 
       var name =
-        this_.getPlayerName(
-          player
-        );
+        this_.getPlayerName(player);
 
       if(!name) {
-
         name =
-          "Player " +
-          (i + 1);
+          "Player " + (index + 1);
       }
 
       if(seen.has(name)) {
-        continue;
+        return;
       }
 
       seen.add(name);
@@ -349,16 +374,16 @@ var aimbot = new client.Hack(function(this_) {
       button.style.cssText =
         "display:block;" +
         "width:100%;" +
-        "padding:7px;" +
+        "padding:8px;" +
         "margin:4px 0;" +
+        "cursor:pointer;" +
         "border:0;" +
         "border-radius:5px;" +
-        "cursor:pointer;" +
         "color:#fff;" +
         "background:" +
         (
           this_.selectedPlayerName === name
-            ? "rgba(80,160,100,0.45)"
+            ? "rgba(70,160,90,0.45)"
             : "rgba(255,255,255,0.08)"
         ) +
         ";";
@@ -371,27 +396,26 @@ var aimbot = new client.Hack(function(this_) {
             this_.selectedPlayerName =
               selectedName;
 
-            this_.target = null;
+            this_.target =
+              null;
+
             this_.targetName =
               selectedName;
 
             this_.resetPrediction();
 
-            this_.updatePlayerPanel();
-
+            this_.playerSelector.style.display =
+              "none";
           };
 
         }(name);
 
-      this_.playerList.appendChild(
+      this_.playerSelectorList.appendChild(
         button
       );
-    }
-  };
 
-  // ----------------------------------------------------------
-  // Find selected player
-  // ----------------------------------------------------------
+    }, this_);
+  };
 
   this_.findSelectedPlayer = function() {
 
@@ -408,12 +432,9 @@ var aimbot = new client.Hack(function(this_) {
       i++
     ) {
 
-      var player =
-        players[i];
-
       var name =
         this_.getPlayerName(
-          player
+          players[i]
         );
 
       if(
@@ -421,38 +442,20 @@ var aimbot = new client.Hack(function(this_) {
         this_.selectedPlayerName
       ) {
 
-        return player;
+        return players[i];
       }
     }
 
     return null;
   };
 
-  // ----------------------------------------------------------
-  // Toggle target panel
-  // ----------------------------------------------------------
-
-  this_.togglePlayerPanel = function() {
-
-    this_.createPlayerPanel();
-
-    this_.updatePlayerPanel();
-
-    this_.playerPanel.style.display =
-      this_.playerPanel.style.display === "none"
-        ? "block"
-        : "none";
-  };
-
-  // ----------------------------------------------------------
-  // Horizontal angle
-  // ----------------------------------------------------------
-
   this_.getHorizontalError = function(worldPos) {
 
     try {
 
-      if(!window.camera) return null;
+      if(!window.camera) {
+        return null;
+      }
 
       var local =
         worldPos.clone();
@@ -470,15 +473,13 @@ var aimbot = new client.Hack(function(this_) {
     }
   };
 
-  // ----------------------------------------------------------
-  // Vertical screen
-  // ----------------------------------------------------------
-
   this_.getVerticalScreen = function(worldPos) {
 
     try {
 
-      if(!window.camera) return null;
+      if(!window.camera) {
+        return null;
+      }
 
       var projected =
         worldPos.clone().project(camera);
@@ -509,10 +510,6 @@ var aimbot = new client.Hack(function(this_) {
       return null;
     }
   };
-
-  // ----------------------------------------------------------
-  // Upper body aim point
-  // ----------------------------------------------------------
 
   this_.getBetterAimPoint = function(player) {
 
@@ -581,15 +578,13 @@ var aimbot = new client.Hack(function(this_) {
     }
   };
 
-  // ----------------------------------------------------------
-  // Direct aim
-  // ----------------------------------------------------------
-
   this_.getBetterAimDelta = function(worldPos) {
 
     try {
 
-      if(!window.camera) return null;
+      if(!window.camera) {
+        return null;
+      }
 
       var local =
         worldPos.clone();
@@ -642,6 +637,13 @@ var aimbot = new client.Hack(function(this_) {
       var height =
         innerHeight;
 
+      if(
+        width <= 0 ||
+        height <= 0
+      ) {
+        return null;
+      }
+
       var verticalFov =
         THREE.MathUtils.degToRad(
           Number(camera.fov) || 60
@@ -692,21 +694,25 @@ var aimbot = new client.Hack(function(this_) {
       }
 
       return {
-        x: Math.max(
-          -1000000,
-          Math.min(
-            1000000,
-            movementX
-          )
-        ),
 
-        y: Math.max(
-          -256000,
-          Math.min(
-            256000,
-            movementY
+        x:
+          Math.max(
+            -1000000,
+            Math.min(
+              1000000,
+              movementX
+            )
+          ),
+
+        y:
+          Math.max(
+            -256000,
+            Math.min(
+              256000,
+              movementY
+            )
           )
-        )
+
       };
 
     } catch(e) {
@@ -714,10 +720,6 @@ var aimbot = new client.Hack(function(this_) {
       return null;
     }
   };
-
-  // ----------------------------------------------------------
-  // Prediction
-  // ----------------------------------------------------------
 
   this_.getPredictedAimPoint = function(player) {
 
@@ -781,9 +783,7 @@ var aimbot = new client.Hack(function(this_) {
       }
 
       var leadTime =
-        this_.prediction.leadTime;
-
-      var distanceFactor =
+        this_.prediction.leadTime *
         Math.min(
           1.30,
           Math.max(
@@ -791,9 +791,6 @@ var aimbot = new client.Hack(function(this_) {
             this_.targetDistance / 12
           )
         );
-
-      leadTime *=
-        distanceFactor;
 
       var leadX =
         this_.velocity.x *
@@ -847,7 +844,7 @@ var aimbot = new client.Hack(function(this_) {
 
       if(!box.isEmpty()) {
 
-        var minimumY =
+        var minY =
           box.min.y +
           (
             box.max.y -
@@ -855,7 +852,7 @@ var aimbot = new client.Hack(function(this_) {
           ) *
           0.60;
 
-        var maximumY =
+        var maxY =
           box.min.y +
           (
             box.max.y -
@@ -865,9 +862,9 @@ var aimbot = new client.Hack(function(this_) {
 
         point.y =
           Math.max(
-            minimumY,
+            minY,
             Math.min(
-              maximumY,
+              maxY,
               point.y
             )
           );
@@ -924,22 +921,19 @@ var aimbot = new client.Hack(function(this_) {
       this_.getPlayers();
 
     // ==========================================================
-    // SELECTED PLAYER MODE
+    // EXPLICIT PLAYER SELECTION
     // ==========================================================
 
-    if(
-      this_.selectedPlayerName
-    ) {
+    if(this_.selectedPlayerName) {
 
       var selected =
         this_.findSelectedPlayer();
 
-      /*
-       * If the selected player temporarily disappears from the
-       * rendered list, keep the NAME locked instead of falling
-       * back to another player.
-       */
       if(selected) {
+
+        if(this_.target !== selected) {
+          this_.resetPrediction();
+        }
 
         this_.target =
           selected;
@@ -952,7 +946,7 @@ var aimbot = new client.Hack(function(this_) {
         this_.target = null;
 
         this_.type =
-          "WAITING: " +
+          "WAITING " +
           this_.selectedPlayerName;
 
         return;
@@ -960,7 +954,7 @@ var aimbot = new client.Hack(function(this_) {
     }
 
     // ==========================================================
-    // KEEP CURRENT AUTOMATIC TARGET
+    // AUTOMATIC TARGET
     // ==========================================================
 
     if(
@@ -974,25 +968,18 @@ var aimbot = new client.Hack(function(this_) {
       ) {
 
         this_.target = null;
-        this_.targetDistance = Infinity;
+        this_.targetName = null;
 
         this_.resetPrediction();
-
       }
     }
-
-    // ==========================================================
-    // AUTOMATIC HORIZONTAL TARGET
-    // ==========================================================
 
     if(
       !this_.selectedPlayerName &&
       !this_.target
     ) {
 
-      var closest =
-        null;
-
+      var closest = null;
       var closestDistance =
         this_.maxDistance;
 
@@ -1045,11 +1032,18 @@ var aimbot = new client.Hack(function(this_) {
           closest
         );
 
+      this_.targetDistance =
+        closestDistance;
+
       this_.resetPrediction();
     }
 
+    if(!this_.target) {
+      return;
+    }
+
     // ==========================================================
-    // DISTANCE
+    // HORIZONTAL DISTANCE
     // ==========================================================
 
     var dx =
@@ -1096,7 +1090,6 @@ var aimbot = new client.Hack(function(this_) {
         Math.abs(delta.x) <
         0.35
       ) {
-
         delta.x = 0;
       }
 
@@ -1104,7 +1097,6 @@ var aimbot = new client.Hack(function(this_) {
         Math.abs(delta.y) <
         0.75
       ) {
-
         delta.y = 0;
       }
 
@@ -1116,9 +1108,8 @@ var aimbot = new client.Hack(function(this_) {
         this_.type =
           "PREDICT " +
           (
-            this_.selectedPlayerName
-              ? this_.selectedPlayerName
-              : "LOCK"
+            this_.selectedPlayerName ||
+            "LOCK"
           ) +
           " " +
           Math.round(
@@ -1129,18 +1120,18 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      var predictionCanvas =
+      var canvas =
         this_.getCanvas();
 
-      if(!predictionCanvas) {
+      if(!canvas) {
         return;
       }
 
-      var predictionElement =
+      var element =
         document.pointerLockElement ||
-        predictionCanvas;
+        canvas;
 
-      predictionElement.dispatchEvent(
+      element.dispatchEvent(
         new MouseEvent(
           "mousemove",
           {
@@ -1165,9 +1156,8 @@ var aimbot = new client.Hack(function(this_) {
       this_.type =
         "PREDICT " +
         (
-          this_.selectedPlayerName
-            ? this_.selectedPlayerName
-            : "LOCK"
+          this_.selectedPlayerName ||
+          "LOCK"
         ) +
         " " +
         Math.round(
@@ -1230,7 +1220,11 @@ var aimbot = new client.Hack(function(this_) {
       ) {
 
         this_.type =
-          "LOCKED";
+          "LOCKED " +
+          (
+            this_.selectedPlayerName ||
+            ""
+          );
 
         return;
       }
@@ -1322,14 +1316,6 @@ var aimbot = new client.Hack(function(this_) {
         betterDelta.x === 0 &&
         betterDelta.y === 0
       ) {
-
-        this_.type =
-          "BETTER LOCK " +
-          Math.round(
-            this_.targetDistance * 10
-          ) / 10 +
-          "m";
-
         return;
       }
 
@@ -1426,7 +1412,7 @@ var aimbot = new client.Hack(function(this_) {
 
     if(verticalScreen !== null) {
 
-      var verticalSmooth =
+      var smooth =
         this_.config["ImproveTurn"]
           ? 0.75
           : this_.targetSmooth;
@@ -1443,7 +1429,7 @@ var aimbot = new client.Hack(function(this_) {
             verticalScreen -
             this_.screenY
           ) *
-          verticalSmooth;
+          smooth;
       }
     }
 
@@ -1460,7 +1446,6 @@ var aimbot = new client.Hack(function(this_) {
       Math.abs(this_.angleY) <
       this_.deadzoneX
     ) {
-
       this_.angleY = 0;
     }
 
@@ -1468,7 +1453,6 @@ var aimbot = new client.Hack(function(this_) {
       Math.abs(verticalError) <
       this_.deadzoneY
     ) {
-
       verticalError = 0;
     }
 
@@ -1488,15 +1472,10 @@ var aimbot = new client.Hack(function(this_) {
         Math.abs(this_.angleY);
 
       if(absAngle > 0.25) {
-
         moveX *= 3.5;
-
       } else if(absAngle > 0.08) {
-
         moveX *= 2.25;
-
       } else {
-
         moveX *= 1.25;
       }
 
@@ -1504,8 +1483,7 @@ var aimbot = new client.Hack(function(this_) {
         Math.abs(verticalError) >
         100
       ) {
-
-        moveY *= 2.0;
+        moveY *= 2;
       }
     }
 
@@ -1581,6 +1559,18 @@ var aimbot = new client.Hack(function(this_) {
       )
     );
 
+    this_.type =
+      (
+        this_.config["ImproveTurn"]
+          ? "IMPROVED "
+          : ""
+      ) +
+      "LOCK " +
+      Math.round(
+        this_.targetDistance * 10
+      ) / 10 +
+      "m";
+
   } catch(e) {
 
     console.warn(
@@ -1605,17 +1595,26 @@ var aimbot = new client.Hack(function(this_) {
 
   this_.resetPrediction();
 
-  if(this_.playerPanel) {
-    this_.playerPanel.remove();
+  if(this_.playerSelector) {
+    this_.playerSelector.remove();
   }
 
-  this_.playerPanel = null;
-  this_.playerList = null;
+  this_.playerSelector = null;
+  this_.playerSelectorList = null;
+
+  /*
+   * Remove the selector button if it was created.
+   */
+  if(this_.selectorButton) {
+    this_.selectorButton.remove();
+  }
+
+  this_.selectorButton = null;
 
 }, "aimbot",
 "Locks aim onto the nearest player or a selected player",
 "n",
-1,
+10,
 {
   "ImproveTurn": {
     type: 0,
@@ -1635,10 +1634,72 @@ var aimbot = new client.Hack(function(this_) {
   "Prediction": {
     type: 0,
     defaultValue: false
-  },
-
-  "Select Player": {
-    type: 2,
-    defaultValue: ""
   }
 });
+
+// Player selector button
+setTimeout(function() {
+
+  try {
+
+    var hackElement =
+      document.getElementById(
+        "aimbot"
+      );
+
+    if(!hackElement) {
+      return;
+    }
+
+    if(
+      hackElement.querySelector(
+        ".cubehc-player-selector-button"
+      )
+    ) {
+      return;
+    }
+
+    var button =
+      document.createElement("button");
+
+    button.className =
+      "cubehc-player-selector-button";
+
+    button.textContent =
+      "🎯 Select Player";
+
+    button.style.cssText =
+      "width:100%;" +
+      "margin-top:8px;" +
+      "padding:7px;" +
+      "cursor:pointer;" +
+      "border:0;" +
+      "border-radius:5px;" +
+      "background:rgba(80,140,255,0.25);" +
+      "color:#fff;";
+
+    button.onclick = function(e) {
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      aimbot.createPlayerSelector();
+
+    };
+
+    hackElement.appendChild(button);
+
+    aimbot.selectorButton =
+      button;
+
+  } catch(e) {
+
+    console.warn(
+      "[Aimbot] Selector setup failed:",
+      e
+    );
+
+  }
+
+}, 1000);
+```
