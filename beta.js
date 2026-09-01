@@ -30,10 +30,26 @@ var aimbot = new client.Hack(function(this_) {
     minSpeed: 0.03
   };
 
+  this_.adaptive = {
+    leadTime: 0.085,
+    minLead: 0.045,
+    maxLead: 0.14,
+    maxHorizontalLead: 7.0,
+    maxVerticalLead: 0.16,
+    velocityWeight: 0.35,
+    nearDistance: 3.0
+  };
+
   this_.velocity =
     new THREE.Vector3();
 
   this_.lastPredicted =
+    new THREE.Vector3();
+
+  this_.adaptiveVelocity =
+    new THREE.Vector3();
+
+  this_.adaptivePoint =
     new THREE.Vector3();
 
   this_.getCanvas = function() {
@@ -475,6 +491,191 @@ var aimbot = new client.Hack(function(this_) {
     }
   };
 
+  this_.getAdaptiveAimPoint = function(player) {
+
+    try {
+
+      var point =
+        this_.getBetterAimPoint(
+          player
+        );
+
+      if(!point) {
+        return null;
+      }
+
+      var velocity =
+        player.velocity;
+
+      if(
+        !velocity ||
+        !Number.isFinite(velocity.x) ||
+        !Number.isFinite(velocity.y) ||
+        !Number.isFinite(velocity.z)
+      ) {
+
+        this_.adaptivePoint.copy(
+          point
+        );
+
+        return this_.adaptivePoint.clone();
+      }
+
+      this_.adaptiveVelocity.lerp(
+        velocity,
+        this_.adaptive.velocityWeight
+      );
+
+      var horizontalSpeed =
+        Math.hypot(
+          this_.adaptiveVelocity.x,
+          this_.adaptiveVelocity.z
+        );
+
+      var distance =
+        this_.targetDistance;
+
+      var distanceFactor =
+        Math.min(
+          1.35,
+          Math.max(
+            0.85,
+            distance / 12
+          )
+        );
+
+      var speedFactor =
+        Math.min(
+          1.35,
+          Math.max(
+            0.80,
+            0.80 +
+            horizontalSpeed * 0.06
+          )
+        );
+
+      var leadTime =
+        this_.adaptive.leadTime *
+        distanceFactor *
+        speedFactor;
+
+      leadTime =
+        Math.max(
+          this_.adaptive.minLead,
+          Math.min(
+            this_.adaptive.maxLead,
+            leadTime
+          )
+        );
+
+      var leadX =
+        this_.adaptiveVelocity.x *
+        leadTime;
+
+      var leadZ =
+        this_.adaptiveVelocity.z *
+        leadTime;
+
+      var horizontalLead =
+        Math.hypot(
+          leadX,
+          leadZ
+        );
+
+      if(
+        horizontalLead >
+        this_.adaptive.maxHorizontalLead
+      ) {
+
+        var scale =
+          this_.adaptive.maxHorizontalLead /
+          horizontalLead;
+
+        leadX *= scale;
+        leadZ *= scale;
+      }
+
+      var leadY =
+        this_.adaptiveVelocity.y *
+        leadTime *
+        0.035;
+
+      leadY =
+        Math.max(
+          -this_.adaptive.maxVerticalLead,
+          Math.min(
+            this_.adaptive.maxVerticalLead,
+            leadY
+          )
+        );
+
+      point.x += leadX;
+      point.z += leadZ;
+      point.y += leadY;
+
+      var box =
+        new THREE.Box3().setFromObject(
+          player
+        );
+
+      if(!box.isEmpty()) {
+
+        var height =
+          box.max.y -
+          box.min.y;
+
+        var minY =
+          box.min.y +
+          height * 0.58;
+
+        var maxY =
+          box.min.y +
+          height * 0.68;
+
+        point.y =
+          Math.max(
+            minY,
+            Math.min(
+              maxY,
+              point.y
+            )
+          );
+      }
+
+      /*
+       * At close range, keep the base body height stable.
+       * This prevents unnecessary vertical twitching.
+       */
+      if(
+        distance <=
+        this_.adaptive.nearDistance
+      ) {
+
+        var currentPoint =
+          this_.getBetterAimPoint(
+            player
+          );
+
+        if(currentPoint) {
+          point.y =
+            currentPoint.y;
+        }
+      }
+
+      this_.adaptivePoint.copy(
+        point
+      );
+
+      return this_.adaptivePoint.clone();
+
+    } catch(e) {
+
+      return this_.getBetterAimPoint(
+        player
+      );
+    }
+  };
+
   this_.resetPrediction = function() {
 
     this_.velocity.set(
@@ -484,6 +685,18 @@ var aimbot = new client.Hack(function(this_) {
     );
 
     this_.lastPredicted.set(
+      0,
+      0,
+      0
+    );
+
+    this_.adaptiveVelocity.set(
+      0,
+      0,
+      0
+    );
+
+    this_.adaptivePoint.set(
       0,
       0,
       0
@@ -641,8 +854,7 @@ var aimbot = new client.Hack(function(this_) {
 
       if(!closest) {
 
-        this_.type =
-          "";
+        this_.type = "";
 
         return;
       }
@@ -673,6 +885,108 @@ var aimbot = new client.Hack(function(this_) {
         dz
       );
 
+    // ==========================================================
+    // ADAPTIVE — MAX PRIORITY
+    // ==========================================================
+
+    if(
+      this_.config["Adaptive"]
+    ) {
+
+      var adaptivePoint =
+        this_.getAdaptiveAimPoint(
+          this_.target
+        );
+
+      if(!adaptivePoint) {
+        return;
+      }
+
+      var adaptiveDelta =
+        this_.getBetterAimDelta(
+          adaptivePoint
+        );
+
+      if(!adaptiveDelta) {
+        return;
+      }
+
+      if(
+        Math.abs(adaptiveDelta.x) <
+        0.12
+      ) {
+        adaptiveDelta.x = 0;
+      }
+
+      if(
+        Math.abs(adaptiveDelta.y) <
+        0.75
+      ) {
+        adaptiveDelta.y = 0;
+      }
+
+      if(
+        adaptiveDelta.x === 0 &&
+        adaptiveDelta.y === 0
+      ) {
+
+        this_.type =
+          "ADAPTIVE LOCK " +
+          Math.round(
+            this_.targetDistance * 10
+          ) / 10 +
+          "m";
+
+        return;
+      }
+
+      var adaptiveCanvas =
+        this_.getCanvas();
+
+      if(!adaptiveCanvas) {
+        return;
+      }
+
+      var adaptiveElement =
+        document.pointerLockElement ||
+        adaptiveCanvas;
+
+      adaptiveElement.dispatchEvent(
+        new MouseEvent(
+          "mousemove",
+          {
+            bubbles: true,
+            cancelable: true,
+
+            movementX:
+              adaptiveDelta.x,
+
+            movementY:
+              adaptiveDelta.y,
+
+            clientX:
+              innerWidth / 2,
+
+            clientY:
+              innerHeight / 2
+          }
+        )
+      );
+
+      this_.type =
+        "ADAPTIVE LOCK " +
+        Math.round(
+          this_.targetDistance * 10
+        ) / 10 +
+        "m";
+
+      return;
+    }
+
+    // ==========================================================
+    // PREDICTION
+    // ==========================================================
+
     if(
       this_.config["Prediction"]
     ) {
@@ -695,26 +1009,17 @@ var aimbot = new client.Hack(function(this_) {
         return;
       }
 
-      /*
-       * Strong horizontal correction.
-       */
       if(
         Math.abs(delta.x) <
         0.20
       ) {
-
         delta.x = 0;
       }
 
-      /*
-       * Smaller vertical deadzone prevents tiny up/down
-       * corrections from constantly flipping direction.
-       */
       if(
         Math.abs(delta.y) <
         1.25
       ) {
-
         delta.y = 0;
       }
 
@@ -744,9 +1049,6 @@ var aimbot = new client.Hack(function(this_) {
         document.pointerLockElement ||
         canvas;
 
-      /*
-       * One direct correction.
-       */
       element.dispatchEvent(
         new MouseEvent(
           "mousemove",
@@ -778,6 +1080,10 @@ var aimbot = new client.Hack(function(this_) {
 
       return;
     }
+
+    // ==========================================================
+    // LOCKIN
+    // ==========================================================
 
     if(
       this_.config["LockIn"]
@@ -864,6 +1170,10 @@ var aimbot = new client.Hack(function(this_) {
       return;
     }
 
+    // ==========================================================
+    // BETTER AIM
+    // ==========================================================
+
     if(
       this_.config["BetterAim"]
     ) {
@@ -948,6 +1258,10 @@ var aimbot = new client.Hack(function(this_) {
 
       return;
     }
+
+    // ==========================================================
+    // NORMAL / IMPROVE TURN
+    // ==========================================================
 
     var aimPos =
       this_.target.getWorldPosition(
@@ -1175,6 +1489,11 @@ var aimbot = new client.Hack(function(this_) {
 "n",
 1,
 {
+  "Adaptive": {
+    type: 0,
+    defaultValue: false
+  },
+
   "ImproveTurn": {
     type: 0,
     defaultValue: false
