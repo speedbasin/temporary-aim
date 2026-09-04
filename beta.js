@@ -1487,7 +1487,7 @@ var aimbot = new client.Hack(function(this_) {
 }, "aimbot",
 "Locks aim onto the nearest player",
 "n",
-1,
+0,
 {
   "Adaptive": {
     type: 0,
